@@ -1,7 +1,7 @@
 # Importando as bibliotecas
 import tkinter as tk
 from tkinter import ttk
-import time
+import subprocess
 import socket
 import struct
 import paramiko
@@ -13,14 +13,14 @@ cordesabilitado = "#808080"  # Cinza
 fonte = "Consolas"
 
 # Variáveis globais
-dominio_usuario = "adm"
+dominio_usuario = "aula"
 dominio_senha = "1234"
 
 # Estrutura de dados para computadores
 computadores = {
     "Laboratorio-1": [
-        {"nome": "LAB1MAQ01", "ip": "172.18.101.1", "mac": "64:1c:67:e3:04:39"},
-        {"nome": "LAB1MAQ02", "ip": "172.18.101.2", "mac": "64:1c:67:e2:ca:ca"},
+        {"nome": "AULA", "ip": "172.19.0.1", "mac": "64:1c:67:e3:04:39"},
+        {"nome": "aula-xubuntu", "ip": "172.19.0.220", "mac": "08:00:27:30:51:ce"},
     ],
     "Laboratorio-2": [
         {"nome": "LAB2MAQ01", "ip": "172.18.102.1", "mac": "64:1c:67:e2:c2:42"},
@@ -72,7 +72,7 @@ def desligar_computador(checkboxes, text_widget):
     mostrar_saida(text_widget, f"Desligando os computadores: {selecionados}")
     for comp in selecionados:
         mostrar_saida(text_widget, f"Desligando {comp}")
-'''
+
 def executar_comando(checkboxes, comando, text_widget):
     selecionados = [comp for comp, var in checkboxes.items() if var.get()]
     mostrar_saida(text_widget, f"Executando comando: {comando} nos computadores: {selecionados}")
@@ -85,7 +85,7 @@ def executar_comando(checkboxes, comando, text_widget):
                 ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 ssh.connect(computador["ip"], username=dominio_usuario, password=dominio_senha, timeout=5)
                 mostrar_saida(text_widget, f"Conectado em {computador['ip']}")
-                stdin, stdout, stderr = ssh.exec_command(comando)
+                stdout, stderr = ssh.exec_command(comando)[1:]
                 saida = stdout.read().decode('utf-8')
                 erro = stderr.read().decode('utf-8')
                 if saida:
@@ -95,45 +95,55 @@ def executar_comando(checkboxes, comando, text_widget):
                 ssh.close()
             except Exception as e:
                 mostrar_saida(text_widget, f"Falha ao executar comando em {comp} ({computador['ip']}): {e}")
-'''
-def executar_comando(self):
-    selecionados = [comp for comp, var in self.checkboxes.items() if var.get()]
-    print(f"Executando comando SSH nos computadores: {selecionados}")
-    comando = "tasklist"  # Comando equivalente ao 'ps aux' no Windows
 
+# Função para executar comando com sudo
+def executar_comando_sudo(checkboxes, comando, text_widget):
+    selecionados = [comp for comp, var in checkboxes.items() if var.get()]
+    mostrar_saida(text_widget, f"Executando comando: {comando} nos computadores: {selecionados}")
+    
     for comp in selecionados:
-        # Obter informações do computador
-        computador = next((pc for lab in self.computadores.values() for pc in lab if pc["nome"] == comp), None)
-        if not computador:
-            print(f"Erro: Informações do computador {comp} não encontradas.")
-            continue
+        computador = next((pc for lab in computadores.values() for pc in lab if pc["nome"] == comp), None)
+        if computador:
+            try:
+                cliente = paramiko.SSHClient()
+                cliente.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                cliente.connect(computador["ip"], username=dominio_usuario, password=dominio_senha, timeout=5)
 
-        ip = computador["ip"]
-        try:
-            # Configurar a conexão SSH
-            ssh = paramiko.SSHClient()
-            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            ssh.connect(
-                hostname=ip,
-                username=self.dominio_usuario,
-                password=self.dominio_senha,
-                timeout=10
-            )
+                # Executa o comando com sudo
+                stdin, stdout, stderr = cliente.exec_command(f"echo {dominio_senha} | sudo -S {comando}")
+                
+                # Lê a saída e os erros
+                saida = stdout.read().decode()
+                erro = stderr.read().decode()
 
-            # Executar o comando
-            print(f"Executando '{comando}' em {comp} ({ip})...")
-            stdin, stdout, stderr = ssh.exec_command(comando)
-            saida = stdout.read().decode("utf-8", errors="ignore")
-            erros = stderr.read().decode("utf-8", errors="ignore")
+                # Mostra a saída no text_widget
+                if saida:
+                    mostrar_saida(text_widget, f"Saída de {comp}:\n{saida}")
+                if erro:
+                    mostrar_saida(text_widget, f"Erro em {comp}:\n{erro}")
 
-            # Exibir os resultados
-            print(f"Saída de {comp}:\n{saida}")
-            if erros:
-                print(f"Erros de {comp}:\n{erros}")
+                cliente.close()
+            except Exception as e:
+                mostrar_saida(text_widget, f"Falha ao executar comando em {comp} ({computador['ip']}): {e}")
 
-            ssh.close()
-        except Exception as e:
-            print(f"Erro ao conectar ou executar comando em {comp} ({ip}): {e}")
+# Função para abrir uma nova janela para comando personalizado
+def abrir_janela_sudo(checkboxes, text_widget):
+    def executar_comando_personalizado():
+        comando = input_comando.get()
+        executar_comando(checkboxes, comando, text_widget)
+        janela.destroy()
+
+    janela = tk.Toplevel()
+    janela.title("Executar Comando Sudo")
+    janela.geometry("400x200")
+    janela.configure(bg=corpadrao)
+
+    tk.Label(janela, text="Digite o comando:", bg=corpadrao, fg=corcontraste, font=(fonte, 12)).pack(pady=10)
+    input_comando = tk.Entry(janela, font=(fonte, 12), width=40)
+    input_comando.pack(pady=10)
+
+    tk.Button(janela, text="Executar", command=executar_comando_personalizado, bg=corcontraste, fg=corpadrao, font=(fonte, 12)).pack(pady=10)
+
 
 
 # Função para abrir uma nova janela para comando personalizado
@@ -297,6 +307,7 @@ class GerenciadorEstacoes:
         tk.Button(self.frame2, text="Desligar Computador", command=lambda: desligar_computador(self.checkboxes, self.text_saida), bg=corcontraste, fg=corpadrao, width=20, height=1, highlightbackground=corcontraste, highlightthickness=1, activebackground=corpadrao, activeforeground=corcontraste, font=(fonte, 12, "bold")).grid(row=2, column=0, pady=10, padx=10, sticky="w")
         tk.Button(self.frame2, text="Executar Tasklist", command=lambda: executar_comando(self.checkboxes, "tasklist", self.text_saida), bg=corcontraste, fg=corpadrao, width=20, height=1, highlightbackground=corcontraste, highlightthickness=1, activebackground=corpadrao, activeforeground=corcontraste, font=(fonte, 12, "bold")).grid(row=3, column=0, pady=10, padx=10, sticky="w")
         tk.Button(self.frame2, text="Comando Personalizado", command=lambda: abrir_janela_comando(self.checkboxes, self.text_saida), bg=corcontraste, fg=corpadrao, width=20, height=1, highlightbackground=corcontraste, highlightthickness=1, activebackground=corpadrao, activeforeground=corcontraste, font=(fonte, 12, "bold")).grid(row=4, column=0, pady=10, padx=10, sticky="w")
+        tk.Button(self.frame2, text="Comando Sudo", command=lambda: abrir_janela_sudo(self.checkboxes, self.text_saida), bg=corcontraste, fg=corpadrao, width=20, height=1, highlightbackground=corcontraste, highlightthickness=1, activebackground=corpadrao, activeforeground=corcontraste, font=(fonte, 12, "bold")).grid(row=5, column=0, pady=10, padx=10, sticky="w")
 
     def selecionar_categoria(self, categoria, var_categoria):
         for pc in computadores[categoria]:
